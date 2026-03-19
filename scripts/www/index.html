@@ -1,11 +1,594 @@
 <!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>PakePlus</title>
-    </head>
-    <body>
-        PakePlus
-    </body>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUB 快改·一键替换·自动跳转·覆盖原文件</title>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', 'Microsoft YaHei', sans-serif;
+            background: #f0f4fa;
+            padding: 24px;
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1.1fr 1.9fr;
+            gap: 24px;
+        }
+        .card {
+            background: white;
+            border-radius: 28px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.04);
+            border: 1px solid #e2eaf3;
+        }
+        h3 {
+            font-size: 1.1rem;
+            font-weight: 560;
+            margin-bottom: 20px;
+            color: #0f2a44;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .upload-zone {
+            border: 2.5px dashed #b7cbe0;
+            border-radius: 24px;
+            padding: 32px 20px;
+            text-align: center;
+            cursor: pointer;
+            background: #f9fdff;
+            transition: 0.2s;
+        }
+        .upload-zone:hover {
+            border-color: #2563eb;
+            background: #eef4ff;
+        }
+        #fileName {
+            margin-top: 12px;
+            font-weight: 500;
+            color: #1e4a7a;
+        }
+        input, button {
+            width: 100%;
+            padding: 13px 18px;
+            border-radius: 20px;
+            border: 1px solid #cbd9ec;
+            font-size: 15px;
+            margin-bottom: 16px;
+        }
+        button {
+            background: #1e4f8a;
+            color: white;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: 0.15s;
+            box-shadow: 0 6px 14px #1e4f8a40;
+        }
+        button.secondary {
+            background: #4b6589;
+            box-shadow: none;
+        }
+        .regex-box {
+            background: #ecf3fa;
+            padding: 8px 16px;
+            border-radius: 40px;
+            width: fit-content;
+            margin: 8px 0 20px;
+        }
+        /* 进度条/状态 */
+        .match-status-bar {
+            background: #e6edf8;
+            border-radius: 40px;
+            padding: 14px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .match-counter {
+            font-weight: 600;
+            color: #1e3f68;
+        }
+        .progress-badge {
+            background: #2563eb;
+            color: white;
+            padding: 6px 18px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+        }
+        .context-box {
+            background: #f5faff;
+            border-radius: 24px;
+            padding: 24px;
+            border: 1px solid #d3e2f7;
+            max-height: 380px;
+            overflow-y: auto;
+            font-size: 15px;
+            line-height: 1.85;
+            white-space: pre-wrap;
+            word-break: break-word;
+            box-shadow: inset 0 2px 8px #dde5f0;
+        }
+        .highlight {
+            background: #fde047;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+            border: 1px solid #fbbf24;
+        }
+        .confirmed-highlight {
+            background: #86efac;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+            border: 1px solid #22c55e;
+        }
+        .action-row {
+            display: flex;
+            gap: 12px;
+            margin: 22px 0 8px;
+        }
+        .action-row button {
+            margin: 0;
+            flex: 1;
+            padding: 16px 0;
+            font-size: 1rem;
+        }
+        .one-click-row {
+            display: flex;
+            gap: 12px;
+            margin: 10px 0 15px;
+        }
+        .one-click-row button {
+            margin: 0;
+            flex: 1;
+            background: #7b4f9c;  /* 紫色表示批量操作 */
+            box-shadow: 0 4px 10px #7b4f9c60;
+        }
+        .jump-note {
+            color: #4a6885;
+            font-size: 0.85rem;
+            margin: 12px 0;
+            background: #e1ebf9;
+            padding: 8px 16px;
+            border-radius: 30px;
+            text-align: center;
+        }
+        #log {
+            background: #eaf0f8;
+            border-radius: 20px;
+            padding: 14px;
+            font-size: 0.8rem;
+            height: 100px;
+            overflow-y: auto;
+        }
+        .file-info {
+            display: flex;
+            gap: 12px;
+            font-size: 0.9rem;
+            background: #e2ecfc;
+            padding: 10px 16px;
+            border-radius: 30px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-grid">
+    <!-- 左：上传 + 搜索设置 -->
+    <div>
+        <div class="card">
+            <h3>📁 1. 上传 EPUB (将覆盖原文件)</h3>
+            <div class="upload-zone" id="uploadZone">📂 点击或拖拽 .epub 文件</div>
+            <input type="file" id="fileInput" accept=".epub" style="display: none">
+            <div id="fileName"></div>
+        </div>
+
+        <div class="card">
+            <h3>🔍 2. 查找与替换</h3>
+            <input id="searchText" placeholder="查找内容 (支持正则)" value="章">
+            <input id="replaceText" placeholder="替换为 (如 节)">
+            <div class="regex-box">
+                <input type="checkbox" id="useRegex" checked> <label for="useRegex">作为正则表达式</label>
+            </div>
+            <button onclick="startSearch()">🚀 开始搜索匹配</button>
+            <div style="margin-top: 10px; color: #52749c; font-size:0.9rem;">✅ 共 <span id="totalMatchHint">0</span> 处匹配</div>
+        </div>
+    </div>
+
+    <!-- 右：逐项预览 + 快速操作 + 一键替换 -->
+    <div>
+        <div class="card">
+            <h3>⚡ 3. 逐项确认（自动跳转）</h3>
+
+            <!-- 进度条/计数 -->
+            <div class="match-status-bar" id="statusBar">
+                <span class="match-counter" id="matchCountText">0 / 0</span>
+                <span class="progress-badge" id="currentPosInfo">-</span>
+            </div>
+
+            <!-- 当前匹配的上下文预览 -->
+            <div class="file-info" id="fileLocation">
+                <span>📄 文件名: <span id="currentFile">—</span></span>
+                <span>📍 位置: <span id="currentOffset">—</span></span>
+            </div>
+            <div class="context-box" id="previewBox">
+                点击「开始搜索匹配」加载匹配项
+            </div>
+
+            <!-- 操作按钮：标记并下一项 / 跳过并下一项 -->
+            <div class="action-row">
+                <button id="markBtn" style="background:#16a34a;">✅ 标记并下一项</button>
+                <button id="skipBtn" style="background:#64748b;">⏭️ 跳过并下一项</button>
+            </div>
+
+            <!-- 新增：一键替换功能区 -->
+            <div class="one-click-row">
+                <button id="markAllBtn" style="background:#8b5cf6;">⚡ 一键标记所有</button>
+                <button id="skipAllBtn" style="background:#a0aec0;">🔁 一键全部跳过</button>
+            </div>
+            <div class="jump-note" id="jumpHint">
+                ✨ 点击后自动保存选择并跳转，最后一项完成后生成文件
+            </div>
+
+            <!-- 手动生成按钮 -->
+            <button id="exportBtn" style="background:#1d3b61;">📦 立即生成修正 EPUB (覆盖原文件名)</button>
+        </div>
+
+        <div class="card">
+            <h3>📋 日志</h3>
+            <div id="log">⚡ 就绪</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        // --- 全局状态 ---
+        let zip = null;                     // JSZip 实例
+        let originalFile = null;             // 原始 File 对象
+        let textFiles = {};                  // 文件名 -> 文本内容
+        let matches = [];                     // 匹配项数组 { file, matchText, start, end, fullContent, id }
+        let confirmedSet = new Set();          // 已标记的 id (file:start)
+
+        let currentIndex = 0;                 // 当前显示的匹配索引 (0-based)
+        let searchPattern = '';
+        let replaceString = '';
+        let useRegex = true;
+
+        // DOM 元素
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileNameDiv = document.getElementById('fileName');
+        const searchInput = document.getElementById('searchText');
+        const replaceInput = document.getElementById('replaceText');
+        const useRegexCheck = document.getElementById('useRegex');
+        const matchCountText = document.getElementById('matchCountText');
+        const currentPosInfo = document.getElementById('currentPosInfo');
+        const currentFileSpan = document.getElementById('currentFile');
+        const currentOffsetSpan = document.getElementById('currentOffset');
+        const previewBox = document.getElementById('previewBox');
+        const markBtn = document.getElementById('markBtn');
+        const skipBtn = document.getElementById('skipBtn');
+        const markAllBtn = document.getElementById('markAllBtn');
+        const skipAllBtn = document.getElementById('skipAllBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const logDiv = document.getElementById('log');
+        const jumpHint = document.getElementById('jumpHint');
+        const totalMatchHint = document.getElementById('totalMatchHint');
+
+        // 辅助日志
+        function log(msg) {
+            const t = new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            logDiv.innerText += `[${t}] ${msg}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function escapeReg(str) {
+            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // --- 上传 & 解压 ---
+        uploadZone.onclick = () => fileInput.click();
+        uploadZone.ondragover = e => e.preventDefault();
+        uploadZone.ondrop = async e => {
+            e.preventDefault();
+            const f = e.dataTransfer.files[0];
+            if (f && f.name.endsWith('.epub')) await loadEpub(f);
+            else alert('请拖入 .epub 文件');
+        };
+        fileInput.onchange = async e => {
+            if (e.target.files[0]) await loadEpub(e.target.files[0]);
+        };
+
+        async function loadEpub(file) {
+            originalFile = file;
+            fileNameDiv.innerText = `📁 ${file.name}`;
+            log(`加载 EPUB: ${file.name}`);
+
+            try {
+                const buf = await file.arrayBuffer();
+                zip = await JSZip.loadAsync(buf);
+                await extractTexts();
+                log(`文本文件数: ${Object.keys(textFiles).length}`);
+                matches = [];
+                confirmedSet.clear();
+                currentIndex = 0;
+                updateMatchCounter();
+                previewBox.innerText = '请点击「开始搜索匹配」';
+                currentFileSpan.innerText = '—';
+                currentOffsetSpan.innerText = '—';
+                totalMatchHint.innerText = '0';
+            } catch (err) {
+                log(`❌ 解压失败: ${err.message}`);
+            }
+        }
+
+        async function extractTexts() {
+            textFiles = {};
+            for (let name in zip.files) {
+                if (zip.files[name].dir) continue;
+                if (!name.match(/\.(xhtml|html|xml|htm|opf|ncx)$/i)) continue;
+                try {
+                    const content = await zip.files[name].async('text');
+                    textFiles[name] = content;
+                } catch (e) {
+                    log(`⚠️ 无法读取 ${name}`);
+                }
+            }
+        }
+
+        // --- 搜索生成匹配列表 ---
+        window.startSearch = function() {
+            if (!zip || Object.keys(textFiles).length === 0) {
+                alert('请先上传 EPUB');
+                return;
+            }
+
+            searchPattern = searchInput.value.trim();
+            replaceString = replaceInput.value;
+            useRegex = useRegexCheck.checked;
+            if (!searchPattern) { alert('输入查找内容'); return; }
+
+            let regex;
+            try {
+                const pattern = useRegex ? searchPattern : escapeReg(searchPattern);
+                regex = new RegExp(pattern, 'g');
+            } catch (err) {
+                alert('正则无效: ' + err.message);
+                return;
+            }
+
+            log(`搜索: ${searchPattern} 替换: ${replaceString}`);
+            matches = [];
+            confirmedSet.clear();
+
+            for (let [file, content] of Object.entries(textFiles)) {
+                regex.lastIndex = 0;
+                let match;
+                while ((match = regex.exec(content)) !== null) {
+                    if (match[0].length === 0) {
+                        regex.lastIndex++;
+                        continue;
+                    }
+                    const start = match.index;
+                    const end = start + match[0].length;
+                    matches.push({
+                        file: file,
+                        matchText: match[0],
+                        start: start,
+                        end: end,
+                        fullContent: content,
+                        id: `${file}:${start}`
+                    });
+                }
+            }
+
+            matches.sort((a,b) => (a.file + a.start).localeCompare(b.file + b.start));
+
+            totalMatchHint.innerText = matches.length;
+
+            if (matches.length === 0) {
+                log('⚠️ 没有匹配项');
+                previewBox.innerText = '无匹配项';
+                updateMatchCounter();
+                return;
+            }
+
+            log(`✅ 共 ${matches.length} 处匹配`);
+            currentIndex = 0;
+            updateMatchCounter();
+            showMatch(currentIndex);
+        };
+
+        // 显示第 i 个匹配
+        function showMatch(index) {
+            if (matches.length === 0) return;
+            if (index < 0) index = 0;
+            if (index >= matches.length) {
+                // 已完成所有项，提示生成
+                jumpHint.innerText = '🎉 已完成所有匹配项！点击下方生成按钮覆盖原文件。';
+                previewBox.innerText = '所有匹配项已处理完毕。';
+                currentFileSpan.innerText = '完成';
+                currentOffsetSpan.innerText = '';
+                currentPosInfo.innerText = `${matches.length} / ${matches.length}`;
+                return;
+            }
+
+            const m = matches[index];
+            currentFileSpan.innerText = m.file.split('/').pop();
+            currentOffsetSpan.innerText = `偏移 ${m.start} - ${m.end}`;
+            currentPosInfo.innerText = `${index+1} / ${matches.length}`;
+
+            // 提取上下文 (前后200字符)
+            const full = m.fullContent;
+            const ctxStart = Math.max(0, m.start - 180);
+            const ctxEnd = Math.min(full.length, m.end + 220);
+            let excerpt = full.substring(ctxStart, ctxEnd);
+            if (ctxStart > 0) excerpt = '⋯' + excerpt;
+            if (ctxEnd < full.length) excerpt = excerpt + '⋯';
+
+            // 高亮显示 (使用原始正则)
+            let hlRegex;
+            try {
+                const pattern = useRegex ? searchPattern : escapeReg(searchPattern);
+                hlRegex = new RegExp(pattern, 'g');
+            } catch (err) {
+                hlRegex = new RegExp(escapeReg(m.matchText), 'g');
+            }
+
+            let highlighted = excerpt.replace(hlRegex, (match) => {
+                return `<span class="highlight">${match}</span>`;
+            });
+
+            // 额外显示当前项的标记状态
+            const isConfirmed = confirmedSet.has(m.id);
+            const statusMsg = isConfirmed ? '✅ 当前项【已标记】' : '⏳ 当前项【未标记】';
+            previewBox.innerHTML = highlighted + `<p style="margin-top:15px; background:#f0f7ff; padding:10px; border-radius:16px;">${statusMsg}</p>`;
+            updateMatchCounter();
+        }
+
+        // 更新计数显示
+        function updateMatchCounter() {
+            matchCountText.innerText = `${matches.length ? currentIndex+1 : 0} / ${matches.length}`;
+        }
+
+        // --- 标记并下一项 ---
+        markBtn.onclick = function() {
+            if (matches.length === 0 || currentIndex >= matches.length) {
+                alert('没有更多匹配项或请先搜索');
+                return;
+            }
+            const m = matches[currentIndex];
+            confirmedSet.add(m.id);
+            log(`✅ 标记: "${m.matchText}" 在 ${m.file}`);
+            moveToNext();
+        };
+
+        // --- 跳过并下一项 ---
+        skipBtn.onclick = function() {
+            if (matches.length === 0 || currentIndex >= matches.length) {
+                alert('没有更多匹配项');
+                return;
+            }
+            const m = matches[currentIndex];
+            log(`⏭️ 跳过: "${m.matchText}"`);
+            moveToNext();
+        };
+
+        function moveToNext() {
+            if (currentIndex + 1 < matches.length) {
+                currentIndex++;
+                showMatch(currentIndex);
+                updateMatchCounter();
+            } else {
+                // 已经是最后一个，处理完成
+                currentIndex = matches.length; // 表示结束
+                showMatch(matches.length); // 展示完成界面
+                updateMatchCounter();
+                jumpHint.innerText = '🏁 已全部处理，点击下方生成按钮覆盖原文件。';
+            }
+        }
+
+        // --- 一键标记所有 ---
+        markAllBtn.onclick = function() {
+            if (matches.length === 0) { alert('请先搜索匹配项'); return; }
+            matches.forEach(m => confirmedSet.add(m.id));
+            log(`⚡ 一键标记所有: ${matches.length} 处`);
+            // 刷新当前视图
+            if (currentIndex < matches.length) {
+                showMatch(currentIndex);
+            } else {
+                showMatch(matches.length-1);
+            }
+        };
+
+        // --- 一键全部跳过 (即清空标记) ---
+        skipAllBtn.onclick = function() {
+            if (matches.length === 0) return;
+            confirmedSet.clear();
+            log(`🔁 一键全部跳过 (已清除所有标记)`);
+            if (currentIndex < matches.length) {
+                showMatch(currentIndex);
+            } else {
+                showMatch(matches.length-1);
+            }
+        };
+
+        // --- 生成 EPUB (覆盖原文件名) ---
+        exportBtn.onclick = async function() {
+            if (!zip || !originalFile) { alert('没有可处理的 EPUB'); return; }
+            if (matches.length === 0) { alert('请先搜索匹配项'); return; }
+
+            log('⏳ 生成修正版，将覆盖原文件名...');
+            try {
+                const newZip = new JSZip();
+                // 编译搜索正则
+                let searchRegex;
+                try {
+                    const pattern = useRegex ? searchPattern : escapeReg(searchPattern);
+                    searchRegex = new RegExp(pattern, 'g');
+                } catch (err) {
+                    alert('正则无效，无法生成');
+                    return;
+                }
+
+                // 处理每个文本文件
+                for (let [file, content] of Object.entries(textFiles)) {
+                    let newContent = content;
+                    // 如果文件中存在匹配项，再执行替换
+                    if (searchRegex.test(content)) {
+                        searchRegex.lastIndex = 0;
+                        newContent = content.replace(searchRegex, function(match) {
+                            const startPos = arguments[arguments.length - 2];
+                            const id = `${file}:${startPos}`;
+                            if (confirmedSet.has(id)) {
+                                return replaceString;
+                            } else {
+                                return match;
+                            }
+                        });
+                    }
+                    newZip.file(file, newContent);
+                }
+
+                // 复制其他非文本文件
+                for (let name in zip.files) {
+                    if (newZip.files[name]) continue;
+                    const f = zip.files[name];
+                    if (f.dir) continue;
+                    try {
+                        const data = await f.async('uint8array');
+                        newZip.file(name, data);
+                    } catch (e) {
+                        log(`⚠️ 复制失败: ${name}`);
+                    }
+                }
+
+                // 生成blob，并使用与原文件相同的名字 (覆盖效果)
+                const blob = await newZip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = originalFile.name;   // 同名下载，提示覆盖原文件（浏览器中需用户确认）
+                a.click();
+                URL.revokeObjectURL(a.href);
+                log(`✅ 生成完成，文件名「${originalFile.name}」已下载，可覆盖原文件。共修改 ${confirmedSet.size} 处。`);
+            } catch (err) {
+                log(`❌ 生成失败: ${err.message}`);
+            }
+        };
+
+        // 初始化
+        log('🟢 快速修改工具 (支持一键标记/跳过)');
+    })();
+</script>
+</body>
 </html>
